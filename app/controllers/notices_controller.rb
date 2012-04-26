@@ -127,7 +127,7 @@ class NoticesController < ApplicationController
             "h4. Request\n\n<pre>#{request.to_xml}</pre>\n\n" +
             "h4. Session\n\n<pre>#{session.to_yaml}</pre>\n\n" +
             "h4. Environment\n\n<pre>#{server_environment.to_xml}</pre>" +
-            "h4. Full XML\n\n<e>#{@xml.to_xml}</pre>\n\n"
+            "h4. Full XML\n\n<pre>#{@xml.to_xml}</pre>\n\n"
           )
         elsif issue.description != description # If a user sends a double feedback, save the text into a new comment
           issue.init_journal(author, description)
