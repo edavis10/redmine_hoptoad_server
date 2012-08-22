@@ -1,5 +1,3 @@
-config.gem 'nokogiri'
-
 require 'redmine'
 
 Redmine::Plugin.register :redmine_hoptoad_server do

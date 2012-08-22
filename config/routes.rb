@@ -1,3 +1,3 @@
-ActionController::Routing::Routes.draw do |map|
-  map.connect '/notifier_api/v2/notices/', :controller => 'notices', :action => 'create'
+Rails.application.routes.draw do
+  match '/notifier_api/v2/notices/' => 'notices#create'
 end
