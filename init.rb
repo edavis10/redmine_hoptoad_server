@@ -1,13 +1,21 @@
-require 'redmine'
-
 Redmine::Plugin.register :redmine_hoptoad_server do
-  name 'Hoptoad Server'
-  author 'Jan Schulz-Hofen, Marcello Barnaba, Matt McMahand, Eric Davis'
-  description 'Redmine acts as an Hoptoad server with this plugin. Hoptoad is an HTTP(S) API, available at http://www.hoptoadapp.com/, to allow automatic reporting of application exceptions. This flavour of the plugin allows Redmine to receive plain-text notifications, useful if you use the Hoptoad facility for e.g. user feedbacks'
-  version '0.0.3'
+  name 'Redmine Hoptoad Server plugin'
+  author 'Jan Schulz-Hofen, Planio GmbH'
+  author_url 'https://plan.io/team/#jan'
+  description 'Turns Redmine into an Airbrake/Hoptoad compatible server, i.e. an API provider which can be used with the Airbrake gem or the hoptoad_notifier plugin.'
+  url 'http://github.com/yeah/redmine_hoptoad_server'
+  version '1.0.0'
 
-  settings({:partial => 'settings/hoptoad_server',
-             :default => {
-               'project_key_custom_field_id' => nil
-             }})
+  requires_redmine :version_or_higher => '2.4.0'
 end
+
+begin
+  require 'nokogiri'
+rescue LoadError
+  Rails.logger.error "Nokogiri gem not found, parsing hoptoad API v2 requests will be sub-optimal"
+end
+
+Rails.configuration.to_prepare do
+  require_dependency 'redmine_hoptoad_server/patches/issue_patch'
+end
+
