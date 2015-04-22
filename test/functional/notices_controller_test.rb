@@ -1,116 +1,69 @@
 require File.dirname(__FILE__) + '/../test_helper'
 
 class NoticesControllerTest < ActionController::TestCase
+  fixtures :projects, :users, :trackers, :projects_trackers, :enumerations, :issue_statuses
 
-  context "per-project keys" do
-    setup do
-      Setting.mail_handler_api_enabled = '0'
-      Setting.mail_handler_api_key = 'off'
-
-      @tracker = Tracker.create(:name => 'Bug')
-      @project = Project.create(:name => 'Sample Project', :identifier => 'sample-project')
-
-
-      @priority = IssuePriority.create!(:name => 'Normal', :position => 2, :is_default => true)
-      @status = IssueStatus.create!(:name => 'New', :is_closed => false, :is_default => true, :position => 1)
-      @project.trackers << @tracker
-      @project.save
-
-      @custom_field = ProjectCustomField.generate!(:name => 'Hoptoad Key', :field_format => 'string')
-      Setting.plugin_redmine_hoptoad_server = {'project_key_custom_field_id' => @custom_field.id.to_s}
-
-      @sample_error = File.read(File.dirname(__FILE__) + '/../fixtures/hoptoad_notification_v2.xml')
-      @request.env["RAW_POST_DATA"] = @sample_error
-
-    end
-
-    context "with a matching key" do
-      setup do
-        @project.custom_field_values = {@custom_field.id.to_s => 'secret'}
-        @project.save!
-      end
-      
-      should "create an issue" do
-        assert_difference 'Issue.count' do
-          post :create
-          assert assigns(:xml)
-        end
-      end
-      
-      should "use the client's tracker name" do
-        post :create
-        @issue = Issue.find(:first, :order => 'id DESC')
-        assert_equal @tracker, @issue.tracker
-      end
-      
-      should "use the client's priority" do
-        post :create
-        @issue = Issue.find(:first, :order => 'id DESC')
-        assert_equal @priority, @issue.priority
-      end
-    end
-
-    context "with an invalid key" do
-      setup do
-        @project.custom_field_values = {@custom_field.id.to_s => 'ponies'}
-        @project.save!
-      end
-
-      should "reject the issue" do
-        post :create
-        assert_response 403
-      end
-
-      should "not save any issues" do
-        assert_no_difference('Issue.count') do
-          post :create
-        end
-      end
-
-      should "not save any journals" do
-        assert_no_difference('Journal.count') do
-          post :create
-        end
-      end
-    end
-
-  end
-  
-  def test_api_v2
-    t = Tracker.create(:name => 'Bug')
-    p = Project.create(:name => 'Sample Project', :identifier => 'sample-project')
-
-    priority = IssuePriority.create!(:name => 'Normal', :position => 2, :is_default => true)
-    status = IssueStatus.create!(:name => 'New', :is_closed => false, :is_default => true, :position => 1)
-    p.trackers << t
-    p.save
-
-    Setting.mail_handler_api_enabled = 1
-    Setting.mail_handler_api_key = 'secret'
-
-    sample_error = File.read(File.dirname(__FILE__) + '/../fixtures/hoptoad_notification_v2.xml')
-    @request.env["RAW_POST_DATA"] = sample_error
-
-    assert_difference 'Issue.count' do
-      post :create
-      assert assigns(:xml)
-    end
-
-    @issue = Issue.find(:first, :order => 'id DESC')
-
-    assert_equal 'Special Error in vendor/plugins/hoptoad_notifier/lib/hoptoad_notifier.rb:136', @issue.subject
-    assert_equal 'Redmine Notifier reported an Error related to source: /my_app/vendor/plugins/hoptoad_notifier/lib/hoptoad_notifier.rb#L136', @issue.description
-    assert_equal t, @issue.tracker
-    assert_equal p, @issue.project
-    assert_equal status, @issue.status
-    assert_equal priority, @issue.priority
-
-    assert_equal 1, @issue.journals.size
-    @journal = @issue.journals.first
-    assert_match /Special Error/, @journal.notes, "Missing Error message"
+  def setup
+    Setting.mail_handler_api_key = 'asdfghjk'
+    @project = Project.find :first
+    @tracker = @project.trackers.first
   end
 
-  # TODO:
-  def test_api_v1
+  test 'should create an issue with journal entry' do
+    assert_difference "Issue.count", 1 do
+      assert_difference "Journal.count", 1 do
+        raw_post :create_v2, {}, create_error.to_xml
+      end
+    end
+    assert_response :success
+    assert issue = Issue.where("subject like ?",
+                                'RuntimeError in plugins/redmine_hoptoad_server/test/functional/notices_controller_test.rb%'
+                              ).first
+    assert_equal(1, issue.journals.size)
+    assert_equal(6, issue.priority_id)
+    assert occurences_field = IssueCustomField.find_by_name('# Occurences')
+    assert occurences_value = issue.custom_value_for(occurences_field)
+    assert_equal('1', occurences_value.value)
+
+
+    assert_no_difference 'Issue.count' do
+      assert_difference "Journal.count", 1 do
+        raw_post :create_v2, {}, create_error.to_xml
+      end
+    end
+    occurences_value.reload
+    assert_equal('2', occurences_value.value)
+  end
+
+  test "should render 404 for non existing project" do
+    assert_no_difference "Issue.count" do
+      assert_no_difference "Journal.count" do
+        raw_post :create_v2, {}, create_error(:project => 'Unknown').to_xml
+      end
+    end
+    assert_response 404
+  end
+
+  test "should render 404 for non existing tracker" do
+    assert_no_difference "Issue.count" do
+      assert_no_difference "Journal.count" do
+        raw_post :create_v2, {}, create_error(:tracker => 'Unknown').to_xml
+      end
+    end
+    assert_response 404
+  end
+
+
+  def create_error(options = {})
+    raise 'test'
+  rescue
+    return Airbrake.send(:build_notice_for,
+                         $!,
+                         :api_key => {
+                           :project => @project.identifier,
+                           :tracker => @tracker.name,
+                           :api_key => 'asdfghjk',
+                           :priority => 6
+                         }.merge(options).to_yaml)
   end
 end
